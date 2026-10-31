@@ -174,7 +174,23 @@ Server to client:
 - Sockets from other websites are refused by an Origin check.
 - Only a fixed list of files is served, which prevents path traversal.
 
-## 9. Testing
+## 9. Animation
+
+Animations only decorate snapshots, so they can never change or delay the game state.
+
+| Moment | Animation | Made with |
+|---|---|---|
+| New screen, new board | Content rises in, dots appear in a wave | CSS |
+| Line drawn | The line grows from its center | CSS, on the `new` class |
+| Box closed | The box pops in with an expanding ring | CSS, on the `fresh` class |
+| Turn changes | The board glow and player card pulse in the player's color | CSS |
+| Score rises, rank changes | The number bumps, the player card slides | Web Animations API, comparing old and new |
+| Game won | Winner's boxes pulse, confetti falls | CSS |
+| Home screen | A demo board plays a short game on a loop | `startDemo` in `app.js` |
+
+Players who ask their device for reduced motion get none of this, and the demo shows its finished board.
+
+## 10. Testing
 
 | Level | What it proves |
 |---|---|
@@ -183,7 +199,7 @@ Server to client:
 | `test/server.test.js` | A full game over real WebSockets, plus limits and file serving |
 | Browser check | Real browser sessions, including phone size |
 
-## 10. Run it
+## 11. Run it
 
 ```
 npm install

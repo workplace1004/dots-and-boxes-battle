@@ -13,28 +13,48 @@
   <body>
     <div id="connection" class="connection" role="status" hidden></div>
 
-    <main id="home" class="screen narrow">
-      <header class="brand">
-        <h1>Dots and Boxes Battle</h1>
-        <p>Draw lines, close boxes and keep your streak going. Most boxes wins.</p>
-      </header>
+    <main id="home" class="screen home">
+      <div class="home-play">
+        <header class="brand">
+          <p class="brand-tag">Live multiplayer, 2 to 6 players</p>
+          <h1>Dots and Boxes <span>Battle</span></h1>
+          <p>Draw lines, close boxes and keep your streak going. Most boxes wins.</p>
+        </header>
 
-      <label class="field" for="name">
-        Your name
-        <input id="name" maxlength="16" autocomplete="nickname" placeholder="Enter your name" />
-      </label>
+        <div class="panel home-form">
+          <label class="field" for="name">
+            Your name
+            <input id="name" maxlength="16" autocomplete="nickname" placeholder="Enter your name" />
+          </label>
 
-      <button id="create" class="primary" type="button">Create a room</button>
+          <button id="create" class="primary" type="button">Create a room</button>
 
-      <div class="divider"><span>or join friends</span></div>
+          <div class="divider"><span>or join friends</span></div>
 
-      <div class="join-row">
-        <label class="field" for="code">
-          Room code
-          <input id="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD" />
-        </label>
-        <button id="join" class="secondary" type="button">Join</button>
+          <div class="join-row">
+            <label class="field" for="code">
+              Room code
+              <input id="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD" />
+            </label>
+            <button id="join" class="secondary" type="button">Join</button>
+          </div>
+        </div>
       </div>
+
+      <section class="panel how" aria-labelledby="how-title">
+        <h2 id="how-title">How to play</h2>
+        <div class="demo-wrap" aria-hidden="true">
+          <div id="demo" class="board demo"><div id="demo-grid" class="grid"></div></div>
+          <p id="demo-caption" class="demo-caption"></p>
+        </div>
+        <ol class="steps">
+          <li><strong>Get everyone in.</strong> Create a room and share the 4-letter code or invite link. The host starts when at least 2 players have joined.</li>
+          <li><strong>Draw one line.</strong> On your turn, tap between two neighbouring dots. You have 20 seconds, or the game draws a random line for you.</li>
+          <li><strong>Close a box, go again.</strong> Draw the fourth side of a box to claim it, then take another turn right away. One line can close two boxes.</li>
+          <li><strong>Win the board.</strong> When every line is drawn, the player with the most boxes wins. Equal top scores share the win.</li>
+        </ol>
+        <p class="tip"><strong>Tip:</strong> avoid drawing the third side of a box, because the next player can close it and keep going.</p>
+      </section>
     </main>
 
     <main id="lobby" class="screen narrow" hidden>
@@ -62,6 +82,11 @@
     </main>
 
     <main id="game" class="screen game" hidden>
+      <div class="game-bar">
+        <span class="chip">Room <strong id="game-code"></strong></span>
+        <span id="boxes-left" class="chip"></span>
+        <button id="game-leave" class="text" type="button">Leave game</button>
+      </div>
       <div class="board-column">
         <div id="status" class="status" aria-live="polite"></div>
         <div class="timer-row" aria-hidden="true">
@@ -77,10 +102,10 @@
         <p class="muted hint">Close a box and you go again.</p>
         <button id="again" class="primary" type="button" hidden>Play again</button>
         <p id="again-wait" class="muted center" hidden>Waiting for the host to start another round.</p>
-        <button id="game-leave" class="text" type="button">Leave game</button>
       </aside>
     </main>
 
+    <div id="confetti" class="confetti" aria-hidden="true"></div>
     <div id="toast" class="toast" role="alert" hidden></div>
   </body>
 </html>

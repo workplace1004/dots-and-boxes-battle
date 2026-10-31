@@ -7,8 +7,22 @@ const NAME_KEY = 'dots-boxes-battle-name';
 const TITLE = 'Dots and Boxes Battle';
 const LOW_TIME_MS = 5000;
 const MAX_RECONNECT_MS = 8000;
+const CONFETTI_PIECES = 70;
+const DEMO_STEP_MS = 1500;
+
+// Lines use the same ids as a real board: 0-3 horizontal, 4-6 vertical. Slots 0 and 1 play.
+const DEMO_STEPS = [
+  { line: 0, slot: 0, caption: 'Red draws a line.' },
+  { line: 4, slot: 1, caption: 'Blue draws a line.' },
+  { line: 2, slot: 0, caption: 'Red draws the third side. Risky!' },
+  { line: 5, slot: 1, box: 0, caption: 'Blue closes the box and claims it.' },
+  { line: 1, slot: 1, caption: 'A closed box means Blue goes again.' },
+  { line: 6, slot: 0, caption: 'Red draws another third side.' },
+  { line: 3, slot: 1, box: 1, caption: 'Blue closes it too. Most boxes wins!' },
+];
 
 const $ = (id) => document.getElementById(id);
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 let socket = null;
 let reconnectMs = 500;
@@ -19,6 +33,8 @@ let lineEls = [];
 let boxEls = [];
 let deadline = 0;
 let wasMyTurn = false;
+let wasPlaying = false;
+let shownScores = {};
 let toastTimer = null;
 
 // Storage can be unavailable in private windows, and the game must still work.
@@ -123,6 +139,8 @@ function endSeat(notice) {
   setSession(null);
   state = null;
   wasMyTurn = false;
+  wasPlaying = false;
+  shownScores = {};
   boardSize = null;
   document.title = TITLE;
   showScreen('home');
@@ -172,6 +190,8 @@ function render(next) {
 function renderLobby(s) {
   showScreen('lobby');
   wasMyTurn = false;
+  wasPlaying = false;
+  shownScores = {};
   document.title = TITLE;
   boardSize = null;
   $('lobby-code').textContent = s.code;
@@ -290,7 +310,7 @@ function renderGame(s) {
     }
     const owner = players.get(ownerId);
     const classes = ['box', 'owned', `slot-${owner.slot}`];
-    if (fresh.has(index) && !finished) classes.push('fresh');
+    if (fresh.has(index)) classes.push('fresh');
     if (finished && winners.has(ownerId)) classes.push('win');
     box.className = classes.join(' ');
     box.textContent = SYMBOLS[owner.slot];
@@ -309,6 +329,7 @@ function renderGame(s) {
     }
     const owner = players.get(ownerId);
     const classes = ['line', kind, 'drawn', `slot-${owner.slot}`];
+    if (index === game.lastLine) classes.push('new');
     if (index === game.lastLine && !finished) classes.push('last');
     line.className = classes.join(' ');
     line.disabled = true;
@@ -317,6 +338,16 @@ function renderGame(s) {
 
   renderStatus(s, myTurn, players);
   renderScores(s);
+
+  // The board glows in the color of whoever is drawing, or of the winner at the end.
+  const accentId = finished ? game.result.winnerIds[0] : game.turnPlayerId;
+  $('board').className = `board slot-${players.get(accentId).slot}${myTurn ? ' mine' : ''}`;
+  $('game-code').textContent = s.code;
+  const left = game.boxes.filter((owner) => owner === null).length;
+  $('boxes-left').textContent = finished ? 'Game over' : `${boxesText(left)} left`;
+
+  if (finished && wasPlaying) celebrate(game.result.winnerIds.map((id) => players.get(id).slot));
+  wasPlaying = s.phase === 'playing';
 
   const isHost = s.hostId === s.you;
   $('again').hidden = !(finished && isHost);
@@ -335,19 +366,45 @@ function renderStatus(s, myTurn, players) {
   const status = $('status');
   const { game } = s;
   status.classList.toggle('mine', myTurn);
+  let text;
   if (s.phase === 'finished') {
-    status.textContent = resultText(s, players);
+    text = resultText(s, players);
     status.classList.toggle('mine', game.result.winnerIds.includes(s.you));
   } else if (myTurn) {
-    status.textContent = game.extraTurn
+    text = game.extraTurn
       ? `${boxesText(game.lastBoxes.length)} closed! Go again`
       : 'Your turn: draw any line';
   } else {
     const { name } = players.get(game.turnPlayerId);
-    status.textContent = game.extraTurn
+    text = game.extraTurn
       ? `${name} closed ${boxesText(game.lastBoxes.length)} and goes again…`
       : `${name} is choosing…`;
   }
+  if (status.textContent !== text) {
+    status.textContent = text;
+    animate(status, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], 220);
+  }
+}
+
+// CSS cannot animate between snapshots, so moves that depend on the previous state use this.
+function animate(element, keyframes, duration) {
+  if (!reducedMotion.matches) element.animate(keyframes, { duration, easing: 'ease-out' });
+}
+
+function celebrate(slots) {
+  if (reducedMotion.matches) return;
+  const pieces = [];
+  for (let i = 0; i < CONFETTI_PIECES; i += 1) {
+    const piece = document.createElement('span');
+    piece.className = `piece slot-${slots[i % slots.length]}`;
+    piece.style.setProperty('--left', `${Math.random() * 100}vw`);
+    piece.style.setProperty('--drift', `${(Math.random() - 0.5) * 30}vw`);
+    piece.style.setProperty('--spin', `${360 + Math.random() * 720}deg`);
+    piece.style.setProperty('--delay', `${Math.random() * 0.7}s`);
+    piece.addEventListener('animationend', () => piece.remove());
+    pieces.push(piece);
+  }
+  $('confetti').replaceChildren(...pieces);
 }
 
 function boxesText(count) {
@@ -368,12 +425,18 @@ function resultText(s, players) {
 function renderScores(s) {
   const { game } = s;
   const winners = game.result?.winnerIds ?? [];
+  const list = $('scores');
+  const oldTops = new Map(
+    [...list.children].map((item) => [item.dataset.player, item.getBoundingClientRect().top]),
+  );
   const rows = [...s.players]
     .sort((a, b) => game.scores[b.id] - game.scores[a.id] || a.slot - b.slot)
     .map((player) => {
       const item = document.createElement('li');
       item.className = `score slot-${player.slot}`;
+      item.dataset.player = player.id;
       if (player.id === game.turnPlayerId) item.classList.add('turn');
+      if (winners.includes(player.id)) item.classList.add('winner');
 
       const info = document.createElement('div');
       info.className = 'info';
@@ -397,10 +460,104 @@ function renderScores(s) {
       big.title = 'Boxes';
       big.setAttribute('aria-label', boxesText(game.scores[player.id]));
 
+      if (game.scores[player.id] > (shownScores[player.id] ?? game.scores[player.id])) {
+        animate(big, [{ transform: 'scale(1.7)' }, { transform: 'scale(1)' }], 350);
+      }
+
       item.append(makeBadge(player), info, big);
       return item;
     });
-  $('scores').replaceChildren(...rows);
+  list.replaceChildren(...rows);
+  shownScores = { ...game.scores };
+
+  // Players slide to their new rank instead of jumping there.
+  for (const item of rows) {
+    const oldTop = oldTops.get(item.dataset.player);
+    const shift = oldTop === undefined ? 0 : oldTop - item.getBoundingClientRect().top;
+    if (shift !== 0) {
+      animate(item, [{ transform: `translateY(${shift}px)` }, { transform: 'none' }], 300);
+    }
+  }
+}
+
+// The looping board on the home screen, built with the same classes as the real one.
+function startDemo() {
+  $('demo').style.setProperty('--cols', 2);
+  $('demo').style.setProperty('--rows', 1);
+  const makeLine = (kind, x, y) => {
+    const line = document.createElement('div');
+    line.className = `line ${kind} open`;
+    place(line, x, y);
+    const stroke = document.createElement('span');
+    stroke.className = 'stroke';
+    line.append(stroke);
+    return line;
+  };
+  const boxes = [0, 1].map((col) => {
+    const box = document.createElement('div');
+    box.className = 'box';
+    place(box, col, 0);
+    return box;
+  });
+  const lines = [
+    makeLine('h', 0.5, 0),
+    makeLine('h', 1.5, 0),
+    makeLine('h', 0.5, 1),
+    makeLine('h', 1.5, 1),
+    makeLine('v', 0, 0.5),
+    makeLine('v', 1, 0.5),
+    makeLine('v', 2, 0.5),
+  ];
+  const dots = [];
+  for (let row = 0; row <= 1; row += 1) {
+    for (let col = 0; col <= 2; col += 1) {
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      place(dot, col, row);
+      dots.push(dot);
+    }
+  }
+  $('demo-grid').replaceChildren(...boxes, ...lines, ...dots);
+
+  const show = (step) => {
+    lines.forEach((line) => line.classList.remove('new', 'last'));
+    boxes.forEach((box) => box.classList.remove('fresh'));
+    lines[step.line].className = `line ${lines[step.line].classList[1]} drawn new last slot-${step.slot}`;
+    if (step.box !== undefined) {
+      boxes[step.box].className = `box owned fresh slot-${step.slot}`;
+      boxes[step.box].textContent = SYMBOLS[step.slot];
+    }
+    $('demo-caption').textContent = step.caption;
+  };
+
+  // Without motion, the finished board stays on screen with the final caption.
+  if (reducedMotion.matches) {
+    DEMO_STEPS.forEach(show);
+    return;
+  }
+
+  const reset = () => {
+    lines.forEach((line) => {
+      line.className = `line ${line.classList[1]} open`;
+    });
+    boxes.forEach((box) => {
+      box.className = 'box';
+      box.textContent = '';
+    });
+  };
+  // Two extra beats hold the finished board before it starts over.
+  let tick = 0;
+  setInterval(() => {
+    if ($('home').hidden) return;
+    if (tick < DEMO_STEPS.length) show(DEMO_STEPS[tick]);
+    tick += 1;
+    if (tick === DEMO_STEPS.length + 2) {
+      reset();
+      tick = 0;
+    }
+  }, DEMO_STEP_MS);
+  show(DEMO_STEPS[0]);
+  tick = 1;
 }
 
 function updateTimer() {
@@ -489,5 +646,6 @@ if (invitedCode) {
 }
 
 setInterval(updateTimer, 100);
+startDemo();
 updateHomeButtons();
 connect();
